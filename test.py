@@ -1,4 +1,4 @@
-from quickbooks2 import QuickBooks
+from quickbooks import QuickBooks
 
 app_token = "eb81179fbbb15b45e4baeb4b665456d40dc6" # not sure what this is for
 consumer_key = "qyprd0mBqvG5ZNPkkchfbZez3eKq0K"
@@ -14,13 +14,20 @@ qb = QuickBooks(consumer_key=consumer_key, consumer_secret=consumer_secret,
                 company_id=company_id,
                 verbosity=10)
 
-existing_attachables = qb.get_objects("Attachable")
-print "Existing Attachable objects length: %d" % len(existing_attachables)
+def test1():
+    existing_attachables = qb.get_objects("Attachable")
+    print "Existing Attachable objects length: %d" % len(existing_attachables)
 
-new_attachment1_path = attachment_dir+"/test1.pdf"   
-new_attachment1_id = qb.upload_file(new_attachment1_path)
+    new_attachment1_path = attachment_dir+"/test1.pdf"   
+    new_attachment1_id = qb.upload_file(new_attachment1_path)
 
-updated_attachables_list = qb.get_objects("Attachable")
-print "Updated list of Attachable objects length: %d" % len(updated_attachables_list)
+    updated_attachables_list = qb.get_objects("Attachable")
+    print "Updated list of Attachable objects length: %d" % len(updated_attachables_list)
 
-# qb.download_file("2800000000001829824")
+def test2():
+    res = qb.reconnect() 
+    print res
+
+
+
+test2()

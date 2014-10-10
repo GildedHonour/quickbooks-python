@@ -24,6 +24,7 @@ class QuickBooks():
         self.session = None
         self.qb_service = None
 
+        #todo - raise an except is something isn't provided
         self.consumer_key = args.get("consumer_key", "")
         self.consumer_secret = args.get("consumer_secret", "")
         self.callback_url = args.get("callback_url", "")
@@ -59,7 +60,8 @@ class QuickBooks():
 
     def reconnect(self):
         reconnect_url = "https://appcenter.intuit.com/api/v1/connection/reconnect"
-        result = self.hammer_it("GET", reconnect_url, None, "multipart/formdata", file_name=path)
+        result = self.hammer_it("GET", url=reconnect_url, request_body=None, content_type="xml")
+        return result
 
     def _create_session_if_needed(self):
         if self.session is None:
