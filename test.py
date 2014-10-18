@@ -1,4 +1,5 @@
 from quickbooks import QuickBooks
+import datetime
 
 # app_token = "eb81179fbbb15b45e4baeb4b665456d40dc6" # not sure what this is for
 # consumer_key = "qyprd0mBqvG5ZNPkkchfbZez3eKq0K"
@@ -18,7 +19,8 @@ company_id = 1290599955
 attachment_dir = "for_upload" # for your convenience
 
 qb = QuickBooks(consumer_key=consumer_key, consumer_secret=consumer_secret, access_token=access_token,  access_token_secret=access_token_secret, 
-    company_id=company_id, verbosity=10)
+    company_id=company_id, expire_date=datetime.date(2014, 11, 21), reconnect_window_days_count=30, verbosity=10
+)
 
 def test1():
     print "Attachments request..."
@@ -33,8 +35,8 @@ def test1():
 
 def test2():
     print "Reconnect request..."
-    res = qb.reconnect() 
+    res = qb._reconnect() 
     print res
 
 
-test2()
+test1()

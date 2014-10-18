@@ -8,7 +8,7 @@ import textwrap
 
 
 import pdb
-
+import datetime
 
 class QuickBooks():
     """
@@ -50,6 +50,7 @@ class QuickBooks():
 
         self.company_id = args.get("company_id", 0)
         self.verbosity = args.get("verbosity", 0)
+
         self._business_objects = ["Account","Attachable","Bill","BillPayment", "Class","CompanyInfo","CreditMemo","Customer",
             "Department","Employee","Estimate","Invoice", "Item","JournalEntry","Payment","PaymentMethod", "Preferences",
             "Purchase","PurchaseOrder", "SalesReceipt","TaxCode","TaxRate","Term", "TimeActivity","Vendor","VendorCredit"
@@ -65,34 +66,23 @@ class QuickBooks():
 
     def _reconnect_by_demand(self):
         current_date = datetime.date.today()
-        if self.expire_date > current_date:
-            #todo
-            days_left = self.expire_date - current_date - self.reconnect_window_days_count
-            if self.expire_date - current_date <= self.reconnect_window_days_count:
-                if reconnect():
+        days_diff = (self.expire_date - current_date).days
+        if days_diff > 0:
+            if days_diff <= self.reconnect_window_days_count:
+                print "Going to reconnect..."
+                if _reconnect():
                     print "Reconnected successfully"
                 else:    
-                    print "Unable to reconnect, try again later, you have {} days to do that".format(days_left)
-
-
-            my_r = self.session.request(request_type, url, header_auth, self.company_id, headers=headers, data=request_body, 
-                verify=False, **req_kwargs
-            )
-
+                    print "Unable to reconnect, try again later, you have {} days left to do that".format(days_diff - self.reconnect_window_days_count)
         else:
-            raise "The token is expired, unable to reconnect, please renew it"
+            raise "The token is expired, unable to reconnect, please get a new one."
 
-
-
-
-    def reconnect(self, i=0):
+    def _reconnect(self, i=0):
         if i > _attemps_count:
             print "Unable to send a request successfully to 'reconnect' end point, there're no attempts left ({} done).".format(i)
             return False
         else:
-            resp = self.session.request("GET", "https://appcenter.intuit.com/api/v1/connection/reconnect", True, self.company_id, headers=headers,
-                verify=False, **req_kwargs
-            )
+            resp = self.session.request("GET", "https://appcenter.intuit.com/api/v1/connection/reconnect", True, self.company_id, headers=headers, verify=False)
             dom = minidom.parseString(ET.tostring(ET.fromstring(resp.content), "utf-8"))
 
             #todo - move to a sepate method
@@ -120,11 +110,11 @@ class QuickBooks():
                     print "An error occurred while trying to reconnect, code: {}, message: \"{}\"".format(error_code, msg)
                     i += 1
                     print "Reconnecting again, attempt #".format(i)
-                    reconnect(i)
+                    _reconnect(i)
             else:
                 print "An HTTP error {} occurred, trying again, attempt #{}".format(resp.status_code, i)
                 i += 1
-                reconnect(i)
+                _reconnect(i)
 
 
     def _create_session_if_needed(self):
@@ -136,7 +126,7 @@ class QuickBooks():
         and specified by OAuth 1.0a.
         :return URI:
         """
-        self.qb_service = OAuth1Service(name = None, consumer_key=self.consumer_key, consumer_secret=self.consumer_secret,
+        self.qb_service = OAuth1Service(name=None, consumer_key=self.consumer_key, consumer_secret=self.consumer_secret,
             request_token_url=self.request_token_url, access_token_url=self.access_token_url, authorize_url=self.authorize_url,
             base_url=None
         )
@@ -372,6 +362,7 @@ class QuickBooks():
         attachment_id = result["AttachableResponse"][0]["Attachable"]["Id"]
         return attachment_id
 
+    #todo - refactor
     def download_file(self, attachment_id, destination_dir="", alternate_name=None):
         """
         Download a file to the requested (or default) directory, then also
@@ -413,7 +404,7 @@ class QuickBooks():
                                    
         return link
 
-    def hammer_it(self, request_type, url, request_body, content_type, accept="json", file_name=None, **req_kwargs):
+    def hammer_it(self, request_type, url, request_body, content_type, accept="xml", file_name=None, **req_kwargs):
         """
         A slim version of simonv3"s excellent keep_trying method. Among other
          trimmings, it assumes we can only use v3 of the
@@ -425,10 +416,9 @@ class QuickBooks():
         #haven"t found an example of when this wouldn't be True, but leaving
         #it for the meantime...
 
-        header_auth = True
-        trying = True
+        trying = True #todo - 
         print_error = False
-        tries = 0
+        tries = 0 
         while trying:
             tries += 1
             if tries > 1:
@@ -471,8 +461,8 @@ class QuickBooks():
                 ) % (boundary, file_name, len(binary_data), binary_data, boundary)
 
 
-            _reconnect_by_demand()
-
+            self._reconnect_by_demand()
+            resp = self.session.request(request_type, url, True, self.company_id, headers=headers, data=request_body, verify=False, **req_kwargs)
             resp_cont_type = resp.headers["content-type"]
             if "xml" in resp_cont_type:
 
@@ -533,7 +523,7 @@ class QuickBooks():
             elif "text/html" in resp_cont_type:
                 pass #todo -???
             else:
-                raise NotImplementedError("How do I parse a %s response?" % resp_cont_type)
+                raise NotImplementedError("How do I parse a %s response?" % resp_cont_type) #todo
 
         return result
 
@@ -581,7 +571,7 @@ class QuickBooks():
                     #it appears that there are "false" authentication
                     #errors all the time and you just have to keep trying...
 
-                    if tries > 15:
+                    if tries > 15: #todo
                         trying = False
                     else:
                         trying = True
