@@ -40,9 +40,11 @@ class QuickBooks():
         self.request_token = args.get("request_token", "")
         self.request_token_secret = args.get("request_token_secret", "")
 
+
+
         #todo
-        self.expire_date = args.get("request_token", "")
-        self.reconnect_window_days_count = args.get("request_token", "")
+        self.expire_date = args.get("expire_date", "")
+        self.reconnect_window_days_count = args.get("reconnect_window_days_count", "")
 
 
 
@@ -61,8 +63,27 @@ class QuickBooks():
             "PurchaseOrder", "SalesReceipt", "TimeActivity", "VendorCredit"
         ]
 
-    def _reconnect_by_demain(self):
-        True reconnect(self) #todo
+    def _reconnect_by_demand(self):
+        current_date = datetime.date.today()
+        if self.expire_date > current_date:
+            #todo
+            days_left = self.expire_date - current_date - self.reconnect_window_days_count
+            if self.expire_date - current_date <= self.reconnect_window_days_count:
+                if reconnect():
+                    print "Reconnected successfully"
+                else:    
+                    print "Unable to reconnect, try again later, you have {} days to do that".format(days_left)
+
+
+            my_r = self.session.request(request_type, url, header_auth, self.company_id, headers=headers, data=request_body, 
+                verify=False, **req_kwargs
+            )
+
+        else:
+            raise "The token is expired, unable to reconnect, please renew it"
+
+
+
 
     def reconnect(self, i=0):
         if i > _attemps_count:
@@ -74,7 +95,7 @@ class QuickBooks():
             )
             dom = minidom.parseString(ET.tostring(ET.fromstring(resp.content), "utf-8"))
 
-            #todo - repeat in separe function and will use everywhere
+            #todo - move to a sepate method
             if resp.status_code == 200:
                 error_code = int(dom.childNodes[0].childNodes[3].childNodes[0].nodeValue)
                 if error_code == 0:
@@ -450,46 +471,30 @@ class QuickBooks():
                 ) % (boundary, file_name, len(binary_data), binary_data, boundary)
 
 
-            current_date = datetime.date.today()
-            if expire_date > current_date:
-                #todo
-                days_left = expire_date - current_date - reconnect_window_days_count
-                if expire_date - current_date <= reconnect_window_days_count:
-                    if reconnect():
-                        print "Reconnected successfully"
-                    else:    
-                        print "Unable to reconnect, try again later, you have {} days to do that".format(days_left)
+            _reconnect_by_demand()
 
-
-                my_r = self.session.request(request_type, url, header_auth, self.company_id, headers=headers, data=request_body, 
-                    verify=False, **req_kwargs
-                )
-
-            else:
-                raise "The token is expired, unable to reconnect, please renew it"
-            
-
-            resp_cont_type = my_r.headers["content-type"]
+            resp_cont_type = resp.headers["content-type"]
             if "xml" in resp_cont_type:
 
+                 #todo
                 pdb.set_trace()
-                print "xml in resp_cont_type" #todo
+                print "xml in resp_cont_type"
 
 
-                result = ET.fromstring(my_r.content)
+                result = ET.fromstring(resp.content)
                 rough_string = ET.tostring(result, "utf-8")
                 reparsed = minidom.parseString(rough_string)
                 if self.verbosity > 0:
-                    print my_r
-                    if my_r.status_code == 503:
+                    print resp
+                    if resp.status_code == 503:
                         print " (Service Unavailable)"
-                    elif my_r.status_code == 401:
+                    elif resp.status_code == 401:
                         print " (Unauthorized -- a dubious response)"
                     else:
                         print " (json parse failed)"
 
                 if self.verbosity > 8:
-                    print my_r.text
+                    print resp.text
                     result = None
 
             elif "json" in resp_cont_type:
@@ -515,15 +520,15 @@ class QuickBooks():
                     print json.dumps(result, indent=1)
 
             elif "plain/text" in resp_cont_type or accept == "filelink":
-                if not "Fault" in my_r.text or tries >= 10:
+                if not "Fault" in resp.text or tries >= 10:
                     trying = False
 
                 else:
                     print "Failed to get file link."
                     if self.verbosity > 4:
-                        print my_r.text
+                        print resp.text
 
-                result = my_r.text
+                result = resp.text
 
             elif "text/html" in resp_cont_type:
                 pass #todo -???
