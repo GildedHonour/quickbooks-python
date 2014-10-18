@@ -6,6 +6,10 @@ import requests, urllib
 import json, time
 import textwrap
 
+
+import pdb
+
+
 class QuickBooks():
     """
     A wrapper class around Python's Rauth module for Quickbooks the API
@@ -16,6 +20,7 @@ class QuickBooks():
     request_token_url = "https://oauth.intuit.com/oauth/v1/get_request_token"
     access_token_url = "https://oauth.intuit.com/oauth/v1/get_access_token"
     authorize_url = "https://appcenter.intuit.com/Connect/Begin"
+    _attemps_count = 5
 
     def __init__(self, **args):
         if "cred_path" in args:
@@ -35,33 +40,71 @@ class QuickBooks():
         self.request_token = args.get("request_token", "")
         self.request_token_secret = args.get("request_token_secret", "")
 
+        #todo
+        self.expire_date = args.get("request_token", "")
+        self.reconnect_window_days_count = args.get("request_token", "")
+
+
+
         self.company_id = args.get("company_id", 0)
         self.verbosity = args.get("verbosity", 0)
-        self._BUSINESS_OBJECTS = [
-            "Account","Attachable","Bill","BillPayment",
-            "Class","CompanyInfo","CreditMemo","Customer",
-            "Department","Employee","Estimate","Invoice",
-            "Item","JournalEntry","Payment","PaymentMethod",
-            "Preferences","Purchase","PurchaseOrder",
-            "SalesReceipt","TaxCode","TaxRate","Term",
-            "TimeActivity","Vendor","VendorCredit"
+        self._business_objects = ["Account","Attachable","Bill","BillPayment", "Class","CompanyInfo","CreditMemo","Customer",
+            "Department","Employee","Estimate","Invoice", "Item","JournalEntry","Payment","PaymentMethod", "Preferences",
+            "Purchase","PurchaseOrder", "SalesReceipt","TaxCode","TaxRate","Term", "TimeActivity","Vendor","VendorCredit"
         ]
 
-        self._NAME_LIST_OBJECTS = [
-            "Account", "Class", "Customer", "Department", "Employee", "Item",
-            "PaymentMethod", "TaxCode", "TaxRate", "Term", "Vendor"
+        self._name_list_objects = ["Account", "Class", "Customer", "Department", "Employee", "Item", "PaymentMethod", "TaxCode", 
+            "TaxRate", "Term", "Vendor"
         ]
 
-        self._TRANSACTION_OBJECTS = [
-            "Bill", "BillPayment", "CreditMemo", "Estimate", "Invoice",
-            "JournalEntry", "Payment", "Purchase", "PurchaseOrder",
-            "SalesReceipt", "TimeActivity", "VendorCredit"
+        self._transaction_objects = ["Bill", "BillPayment", "CreditMemo", "Estimate", "Invoice", "JournalEntry", "Payment", "Purchase", 
+            "PurchaseOrder", "SalesReceipt", "TimeActivity", "VendorCredit"
         ]
 
-    def reconnect(self):
-        reconnect_url = "https://appcenter.intuit.com/api/v1/connection/reconnect"
-        result = self.hammer_it("GET", url=reconnect_url, request_body=None, content_type="xml")
-        return result
+    def _reconnect_by_demain(self):
+        True reconnect(self) #todo
+
+    def reconnect(self, i=0):
+        if i > _attemps_count:
+            print "Unable to send a request successfully to 'reconnect' end point, there're no attempts left ({} done).".format(i)
+            return False
+        else:
+            resp = self.session.request("GET", "https://appcenter.intuit.com/api/v1/connection/reconnect", True, self.company_id, headers=headers,
+                verify=False, **req_kwargs
+            )
+            dom = minidom.parseString(ET.tostring(ET.fromstring(resp.content), "utf-8"))
+
+            #todo - repeat in separe function and will use everywhere
+            if resp.status_code == 200:
+                error_code = int(dom.childNodes[0].childNodes[3].childNodes[0].nodeValue)
+                if error_code == 0:
+                    print "Reconnected successfully"
+                    self.added_at = dom.childNodes[0].childNodes[4].childNodes[0].nodeValue
+                    self.access_token = dom.childNodes[0].childNodes[5].childNodes[0].nodeValue
+                    self.access_token_secret = dom.childNodes[0].childNodes[6].childNodes[0].nodeValue
+
+                    
+                    #todo - remove
+                    print "------------------------------------------------------------"
+                    
+                    print self.added_params_count
+                    print self.access_token
+                    print self.access_token_secret
+                    
+                    print "------------------------------------------------------------"
+
+                    return True
+                else:
+                    msg = dom.childNodes[0].childNodes[2].childNodes[0].nodeValue
+                    print "An error occurred while trying to reconnect, code: {}, message: \"{}\"".format(error_code, msg)
+                    i += 1
+                    print "Reconnecting again, attempt #".format(i)
+                    reconnect(i)
+            else:
+                print "An HTTP error {} occurred, trying again, attempt #{}".format(resp.status_code, i)
+                i += 1
+                reconnect(i)
+
 
     def _create_session_if_needed(self):
         if self.session is None:
@@ -87,9 +130,7 @@ class QuickBooks():
         access_token and access_token_secret on the QB Object.
         :param oauth_verifier: the oauth_verifier as specified by OAuth 1.0a
         """
-        session = self.qb_service.get_auth_session(self.request_token, self.request_token_secret,
-            data={"oauth_verifier": oauth_verifier}
-        )
+        session = self.qb_service.get_auth_session(self.request_token, self.request_token_secret, data={"oauth_verifier": oauth_verifier})
 
         self.access_token = session.access_token
         self.access_token_secret = session.access_token_secret
@@ -169,7 +210,7 @@ class QuickBooks():
         session"s brain.
         """
 
-        if qbbo not in self._BUSINESS_OBJECTS:
+        if qbbo not in self._business_objects:
             raise Exception("%s is not a valid QBO Business Object." % qbbo, " (Note that this validation is case sensitive.)")
 
         url = "https://qb.sbfinance.intuit.com/v3/company/%s/%s" % (self.company_id, qbbo.lower())
@@ -221,7 +262,7 @@ class QuickBooks():
         """
 
         #todo - refactor
-        if qbbo not in self._BUSINESS_OBJECTS:
+        if qbbo not in self._business_objects:
             raise Exception("%s is not a valid QBO Business Object." % qbbo, " (Note that this validation is case sensitive.)")
 
         """
@@ -408,20 +449,41 @@ class QuickBooks():
                     """
                 ) % (boundary, file_name, len(binary_data), binary_data, boundary)
 
-            my_r = self.session.request(request_type, url, header_auth, self.company_id, headers=headers, data=request_body, 
-                verify=False, **req_kwargs
-            )
+
+            current_date = datetime.date.today()
+            if expire_date > current_date:
+                #todo
+                days_left = expire_date - current_date - reconnect_window_days_count
+                if expire_date - current_date <= reconnect_window_days_count:
+                    if reconnect():
+                        print "Reconnected successfully"
+                    else:    
+                        print "Unable to reconnect, try again later, you have {} days to do that".format(days_left)
+
+
+                my_r = self.session.request(request_type, url, header_auth, self.company_id, headers=headers, data=request_body, 
+                    verify=False, **req_kwargs
+                )
+
+            else:
+                raise "The token is expired, unable to reconnect, please renew it"
+            
 
             resp_cont_type = my_r.headers["content-type"]
             if "xml" in resp_cont_type:
+
+                pdb.set_trace()
+                print "xml in resp_cont_type" #todo
+
+
                 result = ET.fromstring(my_r.content)
                 rough_string = ET.tostring(result, "utf-8")
                 reparsed = minidom.parseString(rough_string)
                 if self.verbosity > 0:
                     print my_r
-                    if my_r.status_code in [503]:
+                    if my_r.status_code == 503:
                         print " (Service Unavailable)"
-                    elif my_r.status_code in [401]:
+                    elif my_r.status_code == 401:
                         print " (Unauthorized -- a dubious response)"
                     else:
                         print " (json parse failed)"
@@ -760,10 +822,10 @@ class QuickBooks():
             have twp-item tuples for values, which are operator and criterion
         """
 
-        if business_object not in self._BUSINESS_OBJECTS:
+        if business_object not in self._business_objects:
             raise Exception("%s not in list of QBO Business Objects." %  \
                             business_object + " Please use one of the " + \
-                            "following: %s" % self._BUSINESS_OBJECTS)
+                            "following: %s" % self._business_objects)
 
         #eventually, we should be able to select more than just *,
         #but chances are any further filtering is easier done with Python
@@ -820,10 +882,10 @@ class QuickBooks():
         #we"ll call the attributes by the Business Object"s name + "s",
         #case-sensitive to what Intuit"s documentation uses
 
-        if qbbo not in self._BUSINESS_OBJECTS:
+        if qbbo not in self._business_objects:
             raise Exception("%s is not a valid QBO Business Object." % qbbo)
 
-        elif qbbo in self._NAME_LIST_OBJECTS and query_tail == "":
+        elif qbbo in self._name_list_objects and query_tail == "":
             #to avoid confusion from "deleted" accounts later...
             query_tail = "WHERE Active IN (true,false)"
 
@@ -860,7 +922,7 @@ class QuickBooks():
             if qbbo == "TimeActivity":
                 #for whatever reason, this failed with some basic criteria, so
                 query_tail = ""
-            elif qbbo in self._NAME_LIST_OBJECTS and query_tail == "":
+            elif qbbo in self._name_list_objects and query_tail == "":
                 #just something to avoid confusion from "deleted" accounts later
                 query_tail = "WHERE Active IN (true,false)"
 
@@ -876,7 +938,7 @@ class QuickBooks():
         name = names[qbbo][Id]
         """
 
-        return self.object_dicts(self._NAME_LIST_OBJECTS, requery, params, query_tail)
+        return self.object_dicts(self._name_list_objects, requery, params, query_tail)
 
     def transactions(self, requery=False, params={}, query_tail=""):
         """
@@ -886,4 +948,4 @@ class QuickBooks():
         transaction = transactions[qbbo][Id]
         """
 
-        return self.object_dicts(self._TRANSACTION_OBJECTS, requery, params, query_tail)
+        return self.object_dicts(self._transaction_objects, requery, params, query_tail)
