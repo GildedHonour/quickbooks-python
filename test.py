@@ -39,4 +39,4 @@ def test2():
     print res
 
 
-test2()
+test1()

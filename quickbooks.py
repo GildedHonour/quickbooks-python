@@ -29,7 +29,6 @@ class QuickBooks():
         self.session = None
         self.qb_service = None
 
-        #todo - raise an except is something isn't provided
         self.consumer_key = args.get("consumer_key", "")
         self.consumer_secret = args.get("consumer_secret", "")
         self.callback_url = args.get("callback_url", "")
@@ -40,13 +39,9 @@ class QuickBooks():
         self.request_token = args.get("request_token", "")
         self.request_token_secret = args.get("request_token_secret", "")
 
-
-
-        #todo
         self.expire_date = args.get("expire_date", "")
         self.reconnect_window_days_count = args.get("reconnect_window_days_count", "")
-
-
+        self.acc_token_changed_callback = args.get("acc_token_changed_callback", "")
 
         self.company_id = args.get("company_id", 0)
         self.verbosity = args.get("verbosity", 0)
@@ -83,11 +78,8 @@ class QuickBooks():
             return False
         else:
             self._create_session_if_needed()
-            # resp = self.session.request("GET", "https://appcenter.intuit.com/api/v1/connection/reconnect", True, self.company_id, headers=headers, verify=False)
             resp = self.session.request("GET", "https://appcenter.intuit.com/api/v1/connection/reconnect", True, self.company_id, verify=False)
             dom = minidom.parseString(ET.tostring(ET.fromstring(resp.content), "utf-8"))
-
-            #todo - move to a sepate method
             if resp.status_code == 200:
                 error_code = int(dom.childNodes[0].childNodes[3].childNodes[0].nodeValue)
                 if error_code == 0:
@@ -95,23 +87,13 @@ class QuickBooks():
                     self.added_at = dom.childNodes[0].childNodes[4].childNodes[0].nodeValue
                     self.access_token = dom.childNodes[0].childNodes[5].childNodes[0].nodeValue
                     self.access_token_secret = dom.childNodes[0].childNodes[6].childNodes[0].nodeValue
+                    self.acc_token_changed_callback(self.added_at, self.access_token, self.access_token_secret)
 
-                    
-                    #todo - remove
-                    print "------------------------------------------------------------"
-                    
-                    print self.added_params_count
-                    print self.access_token
-                    print self.access_token_secret
-                    
-                    print "------------------------------------------------------------"
-
-
-                    #todo - save to a file
-
+                    # Although we start using the new tokens, we have to save them to be able to 
+                    # use them again when the script is run the next time
+                    self._save_tokens()
                     return True
                 else:
-                    # todo - stop trying because it's an error from QB?
                     msg = dom.childNodes[0].childNodes[1].childNodes[0].nodeValue
                     print "An error occurred while trying to reconnect, code: {}, message: \"{}\"".format(error_code, msg)
                     i += 1
@@ -123,14 +105,24 @@ class QuickBooks():
                 self._reconnect(i)
 
 
+    def _save_tokens(self, data):
+        import json
+        
+        data = {
+            "access_token": self.access_token,
+            "access_token_secret": self.access_token_secret,
+            "added_at": self.added_at
+        }
+        with open("tokens.json", "w") as json_file:
+            json.dump(data, json_file)    
+
     def _create_session_if_needed(self):
         if self.session is None:
             self.create_session()
 
     def get_authorize_url(self):
-        """Returns the Authorize URL as returned by QB,
-        and specified by OAuth 1.0a.
-        :return URI:
+        """
+        Returns the Authorize URL as returned by QB, and specified by OAuth 1.0a. :return URI:
         """
         self.qb_service = OAuth1Service(name=None, consumer_key=self.consumer_key, consumer_secret=self.consumer_secret,
             request_token_url=self.request_token_url, access_token_url=self.access_token_url, authorize_url=self.authorize_url,
@@ -166,12 +158,12 @@ class QuickBooks():
     def query_fetch_more(self, r_type, header_auth, realm, qb_object, original_payload=""):
         """ Wrapper script around keep_trying to fetch more results if there are more. 
         """
-
-        max_results = 500 # 500 is the maximum number of results returned by QB
+        # The maximum number of results returned by QB
+        max_results = 500 
         start_position = 0
         more = True
         data_set = []
-        url = self.base_url_v3 + "/company/%s/query" % self.company_id
+        url = "{}/company/{}/query".format(self.base_url_v3, self.company_id)
 
         # Edit the payload to return more results.
         payload = original_payload + " MAXRESULTS " + str(max_results)
@@ -181,7 +173,6 @@ class QuickBooks():
                 access = r_dict["QueryResponse"][qb_object]
             except:
                 if "QueryResponse" in r_dict and r_dict["QueryResponse"] == {}:
-                    #print "Query OK, no results: %s" % r_dict["QueryResponse"]
                     return []
                 else:
                     print "FAILED", r_dict
@@ -205,7 +196,7 @@ class QuickBooks():
 
 
             if self.verbosity > 0:
-                print "(batch begins with record %d)" % start_position
+                print "(batch begins with record {})".format(start_position)
 
 
             # Just some math to prepare for the next iteration
@@ -213,7 +204,7 @@ class QuickBooks():
                 start_position = 1
 
             start_position = start_position + max_results
-            payload = "%s STARTPOSITION %s MAXRESULTS %s" % (original_payload, start_position, max_results)
+            payload = "{} STARTPOSITION {} MAXRESULTS {}".format(original_payload, start_position, max_results)
             data_set += r_dict["QueryResponse"][qb_object]
 
         return data_set
@@ -293,14 +284,6 @@ class QuickBooks():
 
         url = "https://quickbooks.api.intuit.com/v3/company/%s/%s" % (self.company_id, qbbo.lower())
 
-        
-        """
-        #work from the existing account json dictionary
-        e_dict = self.get_objects(qbbo)[str(Id)]
-        e_dict.update(update_dict)
-        """
-
-
         # NO! DON'T DO THAT, THEN YOU CAN'T DELETE STUFF YOU WANT TO DELETE!
         e_dict = update_dict
         request_body = json.dumps(e_dict, indent=4)
@@ -372,18 +355,12 @@ class QuickBooks():
     def download_file(self, attachment_id, destination_dir="", alternate_name=None):
         """
         Download a file to the requested (or default) directory, then also
-         return a download link for convenience.
+        return a download link for convenience.
         """
         url = "https://quickbooks.api.intuit.com/v3/company/%s/download/%s" % (self.company_id, attachment_id)
-
-        # Custom accept for file link!
         link =  self.hammer_it("GET", url, None, "json", accept="filelink")
-        
-        # No session required for file download
         success = False
         tries_remaining = 6
-
-        # special hammer it routine for this very un-oauthed GET...
         while not success and tries_remaining >= 0:
             if self.verbosity > 0 and tries_remaining < 6:
                 print "This is attempt #%d to download Attachable id %s." % (6-tries_remaining+1, attachment_id)
@@ -418,11 +395,7 @@ class QuickBooks():
          in xml OR json. (No xml parsing added yet but the way is paved...)
         """
         self._create_session_if_needed()
-
-        #haven"t found an example of when this wouldn't be True, but leaving
-        #it for the meantime...
-
-        trying = True #todo - 
+        trying = True #todo 
         print_error = False
         tries = 0 
         while trying:
@@ -444,7 +417,7 @@ class QuickBooks():
                     headers.update({"Content-Type":  "application/%s" % content_type})
             else:
                 boundary = "-------------PythonMultipartPost"
-                headers.update({"Content-Type": "multipart/form-data; boundary=%s" % boundary,
+                headers.update({"Content-Type": "multipart/form-data; boundary={}".format(boundary),
                     "Accept-Encoding": "gzip;q=1.0,deflate;q=0.6,identity;q=0.3", "User-Agent": "OAuth gem v0.4.7",
                     "Accept":"application/json", "Connection": "close"
                 })
@@ -454,17 +427,17 @@ class QuickBooks():
 
                 request_body = textwrap.dedent(
                     """
-                    --%s
-                    Content-Disposition: form-data; name="file_content_0"; filename="%s"
-                    Content-Length: %d
+                    --{}
+                    Content-Disposition: form-data; name="file_content_0"; filename="{}"
+                    Content-Length: {}
                     Content-Type: image/jpeg
                     Content-Transfer-Encoding: binary
 
-                    %s
+                    {}
 
-                    --%s--
+                    --{}--
                     """
-                ) % (boundary, file_name, len(binary_data), binary_data, boundary)
+                ).format(boundary, file_name, len(binary_data), binary_data, boundary)
 
 
             self._reconnect_by_demand()
@@ -595,10 +568,7 @@ class QuickBooks():
 
     def fetch_customers(self, all=False, page_num=0, limit=10):
         self._create_session_if_needed()
-
-        # Sometimes we use v2 of the API
-        url = self.base_url_v2
-        url += "/resource/customers/v2/%s" % (self.company_id)
+        url = "{}/resource/customers/v2/{}".format(self.base_url_v2, self.company_id)
         customers = []
         if all:
             counter = 1
@@ -606,11 +576,6 @@ class QuickBooks():
             while more:
                 payload = {"ResultsPerPage":30, "PageNum":counter}
                 trying = True
-
-                # Because the QB API is so iffy, let"s try until we get an
-                # non-error
-
-                # Rewrite this to use same code as above.
                 while trying:
                     r = self.session.request("POST", url, header_auth=True, data=payload, realm=self.company_id)
                     root = ET.fromstring(r.text)
@@ -655,9 +620,7 @@ class QuickBooks():
             if "customer" in args["query"]:
                 payload = ("SELECT * FROM %s WHERE CustomerRef = '%s'") % (qb_object, args["query"]["customer"])
 
-        r_dict = self.query_fetch_more("POST", True,
-                self.company_id, qb_object, payload)
-
+        r_dict = self.query_fetch_more("POST", True, self.company_id, qb_object, payload)
         return r_dict
 
 
@@ -672,14 +635,12 @@ class QuickBooks():
 
             #todo - refactor
             customer = self.fetch_customer(args["query"]["customer"])
-            payload = "SELECT * FROM %s WHERE MetaData.CreateTime > '%s'" % (qb_object, customer["MetaData"]["CreateTime"])
+            payload = "SELECT * FROM {} WHERE MetaData.CreateTime > '{}'".format(qb_object, customer["MetaData"]["CreateTime"])
 
         else:
-            payload = "SELECT * FROM %s" % (qb_object)
+            payload = "SELECT * FROM {}".format(qb_object)
 
-        unfiltered_purchases = self.query_fetch_more("POST", True,
-            self.company_id, qb_object, payload)
-
+        unfiltered_purchases = self.query_fetch_more("POST", True, self.company_id, qb_object, payload)
         filtered_purchases = []
 
         #todo - refactor
@@ -710,7 +671,6 @@ class QuickBooks():
 
         payload = {}
         more = True
-
         journal_entries = []
         max_results = 500
         start_position = 0
@@ -724,7 +684,7 @@ class QuickBooks():
 
         payload = original_payload + " MAXRESULTS " + str(max_results)
         while more:
-            url = self.base_url_v3 + "/company/%s/query" % (self.company_id)
+            url = "{}/company/{}/query".format(self.base_url_v3, self.company_id)
             r_dict = self.keep_trying("POST", url, True, self.company_id, payload)
             if int(r_dict["QueryResponse"]["totalCount"]) < max_results:
                 more = False
@@ -784,7 +744,7 @@ class QuickBooks():
             start_position = start_position + max_results
 
             # set new payload
-            payload = "%s STARTPOSITION %s MAXRESULTS %s" % (original_payload, start_position, max_results)
+            payload = "{} STARTPOSITION {} MAXRESULTS {}".format(original_payload, start_position, max_results)
             bill = r_dict["QueryResponse"]["Bill"]
 
             # This has to happen because the QBO API doesn"t support
@@ -824,46 +784,44 @@ class QuickBooks():
         """
 
         if business_object not in self._business_objects:
-            raise Exception("%s not in list of QBO Business Objects." %  \
-                            business_object + " Please use one of the " + \
-                            "following: %s" % self._business_objects)
+            raise Exception("{} not in list of QBO Business Objects. Please use one of the following: {}").format(
+                business_object, self._business_objects
+            )
 
         #eventually, we should be able to select more than just *,
         #but chances are any further filtering is easier done with Python
         #than in the query...
 
-        query_string="SELECT * FROM %s" % business_object
+        query_string = "SELECT * FROM " + business_object
         if query_tail == "" and not params == {}:
 
             #It"s not entirely obvious what are valid properties for
             #filtering, so we"ll collect the working ones here and
             #validate the properties before sending it
             #datatypes are defined here:
-            #https://developer.intuit.com/docs/0025_quickbooksapi/
-            #    0050_data_services/020_key_concepts/0700_other_topics
+            #https://developer.intuit.com/docs/0025_quickbooksapi/0050_data_services/020_key_concepts/0700_other_topics
 
-            props = {"TxnDate":"Date", "MetaData.CreateTime":"DateTime", "MetaData.LastUpdatedTime":"DateTime"}
+            props = {"TxnDate": "Date", "MetaData.CreateTime": "DateTime", "MetaData.LastUpdatedTime": "DateTime"}
             p = params.keys()
 
             #only validating the property name for now, not the DataType
             if p[0] not in props:
-                raise Exception("Unfamiliar property: %s" % p[0])
+                raise Exception("Unfamiliar property: {}".format(p[0]))
 
-            query_string+=" WHERE %s %s %s" % (p[0], params[p[0]][0], params[p[0]][1]) #todo
-
-            if len(p)>1:
+            query_string += " WHERE {} {} {}".format(p[0], params[p[0]][0], params[p[0]][1])
+            if len(p) > 1:
                 for i in range(1,len(p)+1):
                     if p[i] not in props:
-                        raise Exception("Unfamiliar property: %s" % p[i])
+                        raise Exception("Unfamiliar property: {}".format(p[i]))
 
-                    query_string+=" AND %s %s %s" % (p[i], params[p[i]][0], params[p[i]][1]) #todo
+                    query_string += " AND {} {} {}".format(p[i], params[p[i]][0], params[p[i]][1])
 
         elif not query_tail == "":
             if not query_tail[0]==" ":
                 query_tail = " " + query_tail
             query_string += query_tail
 
-        url = self.base_url_v3 + "/company/%s/query" % self.company_id
+        url = "{}/company/{}/query".format(self.base_url_v3, self.company_id)
         results = self.query_fetch_more(r_type="POST", header_auth=True, realm=self.company_id, qb_object=business_object,
             original_payload=query_string
         )
@@ -884,18 +842,17 @@ class QuickBooks():
         #case-sensitive to what Intuit"s documentation uses
 
         if qbbo not in self._business_objects:
-            raise Exception("%s is not a valid QBO Business Object." % qbbo)
+            raise Exception("{} is not a valid QBO Business Object.".format(qbbo))
 
         elif qbbo in self._name_list_objects and query_tail == "":
             #to avoid confusion from "deleted" accounts later...
             query_tail = "WHERE Active IN (true,false)"
 
-        attr_name = qbbo+"s"
+        attr_name = qbbo + "s"
 
         #if we"ve already populated this list, only redo if told to
         #because, say, we"ve created another Account or Item or something
         #during the session
-
         if not hasattr(self,attr_name) or requery:
             if self.verbosity > 0:
                 print "Caching list of %ss." % qbbo
