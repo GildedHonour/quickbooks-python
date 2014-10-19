@@ -1,20 +1,20 @@
 from quickbooks import QuickBooks
 import datetime
 
-# app_token = "eb81179fbbb15b45e4baeb4b665456d40dc6" # not sure what this is for
-# consumer_key = "qyprd0mBqvG5ZNPkkchfbZez3eKq0K"
-# consumer_secret = "QuwKEiFGHEKubirxTAVkTQkKXEYmiHIEGzMJscUY"
-# callback_url = "https://www.somecompany.com/callback"
-# access_token = "qyprdXNLmLvvQEUgR1v3E7aaa3oK5LvKth42biHFv41coaan"
-# access_token_secret = "fa4slHamwst8lXqeGnNNr0FueuzUxFYxHE1vKBXo"
-# company_id = 1243290815  # this is a paid company I set up for this job
+app_token = "eb81179fbbb15b45e4baeb4b665456d40dc6" # not sure what this is for
+consumer_key = "qyprd0mBqvG5ZNPkkchfbZez3eKq0K"
+consumer_secret = "QuwKEiFGHEKubirxTAVkTQkKXEYmiHIEGzMJscUY"
+callback_url = "https://www.somecompany.com/callback"
+access_token = "qyprdXNLmLvvQEUgR1v3E7aaa3oK5LvKth42biHFv41coaan"
+access_token_secret = "fa4slHamwst8lXqeGnNNr0FueuzUxFYxHE1vKBXo"
+company_id = 1243290815  # this is a paid company I set up for this job
 
-app_token = "062f9563b7991b45fdb864bb544359059f80" # not sure what this is for
-consumer_key = "qyprd2loodRExndb7eKLeXZoi5B1hu"
-consumer_secret = "JpLP3hQs2fFKj7ELgzz2vM2pB0XQ1hTLevdThIqR"
-access_token = "qyprdWkGAONo5AY2EZVHHW3kb9kS1QshfCGFbirDIxXRGUMQ"
-access_token_secret = "Bcngs7boD20NM6GTNnkh5XPKrscDCOaLvaN45vdJ"
-company_id = 1290599955
+# app_token = "062f9563b7991b45fdb864bb544359059f80" # not sure what this is for
+# consumer_key = "qyprdn2KltBPPlRLiXX7ethjImcxQ5"
+# consumer_secret = "md9RzPdjnUREtDuGl9fqfb9Y43z5LAW5vwHK368m"
+# access_token = "qyprdy6sDShzIxhqnxE8VQGBLGrvDxWr8MCIXDFqSrYWVRhJ"
+# access_token_secret = "ah1CHOG9NQBsiuOicwg7yrlcqNfvYvXPj4opRi9F"
+# company_id = 1290599955
 
 attachment_dir = "for_upload" # for your convenience
 
@@ -39,4 +39,4 @@ def test2():
     print res
 
 
-test1()
+test2()

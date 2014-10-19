@@ -78,11 +78,13 @@ class QuickBooks():
             raise "The token is expired, unable to reconnect, please get a new one."
 
     def _reconnect(self, i=0):
-        if i > _attemps_count:
-            print "Unable to send a request successfully to 'reconnect' end point, there're no attempts left ({} done).".format(i)
+        if i > self._attemps_count:
+            print "Unable to reconnect, there're no attempts left ({} attempts sent).".format(i)
             return False
         else:
-            resp = self.session.request("GET", "https://appcenter.intuit.com/api/v1/connection/reconnect", True, self.company_id, headers=headers, verify=False)
+            self._create_session_if_needed()
+            # resp = self.session.request("GET", "https://appcenter.intuit.com/api/v1/connection/reconnect", True, self.company_id, headers=headers, verify=False)
+            resp = self.session.request("GET", "https://appcenter.intuit.com/api/v1/connection/reconnect", True, self.company_id, verify=False)
             dom = minidom.parseString(ET.tostring(ET.fromstring(resp.content), "utf-8"))
 
             #todo - move to a sepate method
@@ -104,17 +106,21 @@ class QuickBooks():
                     
                     print "------------------------------------------------------------"
 
+
+                    #todo - save to a file
+
                     return True
                 else:
-                    msg = dom.childNodes[0].childNodes[2].childNodes[0].nodeValue
+                    # todo - stop trying because it's an error from QB?
+                    msg = dom.childNodes[0].childNodes[1].childNodes[0].nodeValue
                     print "An error occurred while trying to reconnect, code: {}, message: \"{}\"".format(error_code, msg)
                     i += 1
-                    print "Reconnecting again, attempt #".format(i)
-                    _reconnect(i)
+                    print "Trying to reconnect again... attempt #{}".format(i)
+                    self._reconnect(i)
             else:
                 print "An HTTP error {} occurred, trying again, attempt #{}".format(resp.status_code, i)
                 i += 1
-                _reconnect(i)
+                self._reconnect(i)
 
 
     def _create_session_if_needed(self):
@@ -434,7 +440,7 @@ class QuickBooks():
                 headers = {"Accept": "application/%s" % accept}
 
             if file_name == None:
-                if not request_type == "GET": # todo - is not?
+                if not request_type == "GET":
                     headers.update({"Content-Type":  "application/%s" % content_type})
             else:
                 boundary = "-------------PythonMultipartPost"
@@ -467,7 +473,7 @@ class QuickBooks():
             if "xml" in resp_cont_type:
 
                  #todo
-                pdb.set_trace()
+                # pdb.set_trace()
                 print "xml in resp_cont_type"
 
 
