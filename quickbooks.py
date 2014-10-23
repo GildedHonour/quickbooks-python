@@ -83,7 +83,6 @@ class QuickBooks():
                 if error_code == 0:
                     print "Reconnected successfully"
 
-                    # todo - convert to datetime
                     date_raw  = dom.getElementsByTagNameNS(self._namespace, "ServerTime")[0].firstChild.nodeValue
                     from dateutil import parser
                     self.added_at = parser.parse(date_raw).date()
