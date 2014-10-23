@@ -5,9 +5,6 @@ from xml.dom import minidom
 import requests, urllib
 import json, time
 import textwrap
-
-
-import pdb
 import datetime
 
 class QuickBooks():
@@ -21,6 +18,7 @@ class QuickBooks():
     access_token_url = "https://oauth.intuit.com/oauth/v1/get_access_token"
     authorize_url = "https://appcenter.intuit.com/Connect/Begin"
     _attemps_count = 5
+    _namespace = "http://platform.intuit.com/api/v1"
 
     def __init__(self, **args):
         if "cred_path" in args:
@@ -41,7 +39,7 @@ class QuickBooks():
 
         self.expire_date = args.get("expire_date", "")
         self.reconnect_window_days_count = args.get("reconnect_window_days_count", "")
-        self.acc_token_changed_callback = args.get("acc_token_changed_callback", "")
+        self.acc_token_changed_callback = args.get("acc_token_changed_callback", None)
 
         self.company_id = args.get("company_id", 0)
         self.verbosity = args.get("verbosity", 0)
@@ -65,36 +63,39 @@ class QuickBooks():
         if days_diff > 0:
             if days_diff <= self.reconnect_window_days_count:
                 print "Going to reconnect..."
-                if _reconnect():
+                if self._reconnect():
                     print "Reconnected successfully"
                 else:    
                     print "Unable to reconnect, try again later, you have {} days left to do that".format(days_diff - self.reconnect_window_days_count)
         else:
             raise "The token is expired, unable to reconnect, please get a new one."
 
-    def _reconnect(self, i=0):
+    def _reconnect(self, i=1):
         if i > self._attemps_count:
             print "Unable to reconnect, there're no attempts left ({} attempts sent).".format(i)
             return False
         else:
-            self._create_session_if_needed()
+            self._create_session_by_demand()
             resp = self.session.request("GET", "https://appcenter.intuit.com/api/v1/connection/reconnect", True, self.company_id, verify=False)
             dom = minidom.parseString(ET.tostring(ET.fromstring(resp.content), "utf-8"))
             if resp.status_code == 200:
-                error_code = int(dom.childNodes[0].childNodes[3].childNodes[0].nodeValue)
+                error_code = int(dom.getElementsByTagNameNS(self._namespace, "ErrorCode")[0].firstChild.nodeValue)
                 if error_code == 0:
                     print "Reconnected successfully"
-                    self.added_at = dom.childNodes[0].childNodes[4].childNodes[0].nodeValue
-                    self.access_token = dom.childNodes[0].childNodes[5].childNodes[0].nodeValue
-                    self.access_token_secret = dom.childNodes[0].childNodes[6].childNodes[0].nodeValue
-                    self.acc_token_changed_callback(self.added_at, self.access_token, self.access_token_secret)
 
-                    # Although we start using the new tokens, we have to save them to be able to 
-                    # use them again when the script is run the next time
-                    self._save_tokens()
+                    # todo - convert to datetime
+                    date_raw  = dom.getElementsByTagNameNS(self._namespace, "ServerTime")[0].firstChild.nodeValue
+                    from dateutil import parser
+                    self.added_at = parser.parse(date_raw).date()
+                    
+                    self.access_token = str(dom.getElementsByTagNameNS(self._namespace, "OAuthToken")[0].firstChild.nodeValue)
+                    self.access_token_secret = str(dom.getElementsByTagNameNS(self._namespace, "OAuthTokenSecret")[0].firstChild.nodeValue)
+                    if self.acc_token_changed_callback:
+                        self.acc_token_changed_callback(self.added_at, self.access_token, self.access_token_secret)
+
                     return True
                 else:
-                    msg = dom.childNodes[0].childNodes[1].childNodes[0].nodeValue
+                    msg = str(dom.getElementsByTagNameNS(self._namespace, "ErrorMessage")[0].firstChild.nodeValue)
                     print "An error occurred while trying to reconnect, code: {}, message: \"{}\"".format(error_code, msg)
                     i += 1
                     print "Trying to reconnect again... attempt #{}".format(i)
@@ -104,19 +105,7 @@ class QuickBooks():
                 i += 1
                 self._reconnect(i)
 
-
-    def _save_tokens(self, data):
-        import json
-        
-        data = {
-            "access_token": self.access_token,
-            "access_token_secret": self.access_token_secret,
-            "added_at": self.added_at
-        }
-        with open("tokens.json", "w") as json_file:
-            json.dump(data, json_file)    
-
-    def _create_session_if_needed(self):
+    def _create_session_by_demand(self):
         if self.session is None:
             self.create_session()
 
@@ -394,7 +383,7 @@ class QuickBooks():
          QBO API. It also allows for requests and responses
          in xml OR json. (No xml parsing added yet but the way is paved...)
         """
-        self._create_session_if_needed()
+        self._create_session_by_demand()
         trying = True #todo 
         print_error = False
         tries = 0 
@@ -444,12 +433,6 @@ class QuickBooks():
             resp = self.session.request(request_type, url, True, self.company_id, headers=headers, data=request_body, verify=False, **req_kwargs)
             resp_cont_type = resp.headers["content-type"]
             if "xml" in resp_cont_type:
-
-                 #todo
-                # pdb.set_trace()
-                print "xml in resp_cont_type"
-
-
                 result = ET.fromstring(resp.content)
                 rough_string = ET.tostring(result, "utf-8")
                 reparsed = minidom.parseString(rough_string)
@@ -513,7 +496,7 @@ class QuickBooks():
         inconsistent 
         """
         
-        self._create_session_if_needed()
+        self._create_session_by_demand()
 
         trying = True
         tries = 0
@@ -534,7 +517,7 @@ class QuickBooks():
                     trying = False
             else:
                 headers = {"Content-Type": "application/text", "Accept": "application/json"}
-                r = self.session.request(r_type, url, header_auth, realm, headers=headers, data=payload)
+                r = self.session.request(r_type, url, header_auth, realm, headers=headers, data=payload, verify=False)
                 try:
                     r_dict = r.json()
                 except:
@@ -567,7 +550,7 @@ class QuickBooks():
             return r_dict["Customer"]
 
     def fetch_customers(self, all=False, page_num=0, limit=10):
-        self._create_session_if_needed()
+        self._create_session_by_demand()
         url = "{}/resource/customers/v2/{}".format(self.base_url_v2, self.company_id)
         customers = []
         if all:

@@ -1,42 +1,37 @@
 from quickbooks import QuickBooks
 import datetime
 
-# app_token = "eb81179fbbb15b45e4baeb4b665456d40dc6" # not sure what this is for
-# consumer_key = "qyprd0mBqvG5ZNPkkchfbZez3eKq0K"
-# consumer_secret = "QuwKEiFGHEKubirxTAVkTQkKXEYmiHIEGzMJscUY"
-# callback_url = "https://www.somecompany.com/callback"
-# access_token = "qyprdXNLmLvvQEUgR1v3E7aaa3oK5LvKth42biHFv41coaan"
-# access_token_secret = "fa4slHamwst8lXqeGnNNr0FueuzUxFYxHE1vKBXo"
-# company_id = 1243290815  # this is a paid company I set up for this job
+app_token = "eb81179fbbb15b45e4baeb4b665456d40dc6"
+consumer_key = "qyprd0mBqvG5ZNPkkchfbZez3eKq0K"
+consumer_secret = "QuwKEiFGHEKubirxTAVkTQkKXEYmiHIEGzMJscUY"
+callback_url = "https://www.somecompany.com/callback"
+access_token = "qyprdXNLmLvvQEUgR1v3E7aaa3oK5LvKth42biHFv41coaan"
+access_token_secret = "fa4slHamwst8lXqeGnNNr0FueuzUxFYxHE1vKBXo"
+company_id = 1243290815
 
-app_token = "062f9563b7991b45fdb864bb544359059f80" # not sure what this is for
-consumer_key = "qyprdyudAcPwhA7HbB0M9HdtKxo6Ww"
-consumer_secret = "iF6ZvoYXeItkhAOrGYecSdkTZZkiOB9WVRbj6xsI"
-access_token = "qyprdIclNWO77UzMp4R8ESIeh2tbn7donnbQA8xKoy1se0Ut"
-access_token_secret = "uDoecbaGanASA73AmSSYOPV0MFBlg86WqhV84Jzs"
-company_id = 1290599955
+# a client
+class C1(object):
+    # a callback function, it must accept 3 arguments
+    def on_refresh_token(self, added_at, access_token, access_tokne_s):
+        print "on_refresh_token"
+        print "added: {}, acc_t: {}, access_ts: {}".format(added_at, access_token, access_tokne_s)
 
-attachment_dir = "for_upload" # for your convenience
-
+c1 = C1()
 qb = QuickBooks(consumer_key=consumer_key, consumer_secret=consumer_secret, access_token=access_token,  access_token_secret=access_token_secret, 
-    company_id=company_id, expire_date=datetime.date(2014, 11, 21), reconnect_window_days_count=30, verbosity=10
+    company_id=company_id, expire_date=datetime.date(2015, 11, 21), reconnect_window_days_count=30, verbosity=10,
+    acc_token_changed_callback = c1.on_refresh_token # passing the callback function to QB
 )
 
 def test1():
     print "Attachments request..."
     existing_attachables = qb.get_objects("Attachable")
     print "Existing Attachable objects length: %d" % len(existing_attachables)
-
-    new_attachment1_path = attachment_dir+"/test1.pdf"   
-    new_attachment1_id = qb.upload_file(new_attachment1_path)
-
+    new_attachment1_id = qb.upload_file("for_upload/test1.pdf")
     updated_attachables_list = qb.get_objects("Attachable")
     print "Updated list of Attachable objects length: %d" % len(updated_attachables_list)
 
 def test2():
     print "Reconnect request..."
-    res = qb._reconnect() 
-    print res
-
+    qb._reconnect() 
 
 test1()
